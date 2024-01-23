@@ -5,19 +5,21 @@ import io
 import numpy as np
 
 
-
 class robosuiteError(Exception):
     """Base class for exceptions in robosuite."""
+
     pass
 
 
 class XMLError(robosuiteError):
     """Exception raised for errors related to xml."""
+
     pass
 
 
 class RandomizationError(robosuiteError):
     """Exception raised for errors related to xml."""
+
     pass
 
 
@@ -110,9 +112,15 @@ class MujocoXML(object):
         with io.StringIO() as string:
             string.write(ET.tostring(self.root, encoding="unicode"))
             if mode == "mujoco_py":
-                from mujoco_py import load_model_from_xml
+                from mujoco_py import load_model_from_xml, load_model_from_path
 
-                model = load_model_from_xml(string.getvalue())
+                # save temp xml file and load model from file
+                # fname = "unity_xml/temp.xml"
+                fname = "temp.xml"
+                self.save_model(fname, pretty=True)
+                model = load_model_from_path(fname)
+                # print(string.getvalue())#debug
+                # model = load_model_from_xml(string.getvalue())
                 return model
             raise ValueError(
                 "Unkown model mode: {}. Available options are: {}".format(
@@ -158,11 +166,10 @@ class MujocoXML(object):
 
     def get_children_names(self):
         if self.debug:
-            print('Reading object xml')
+            print("Reading object xml")
         names = []
         for child in self.root.iter("body"):
             if self.debug:
-                print('\t', child.tag, child.get('name'))
-            names.append(child.get('name'))
+                print("\t", child.tag, child.get("name"))
+            names.append(child.get("name"))
         return names
-

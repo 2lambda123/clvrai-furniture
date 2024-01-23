@@ -10,7 +10,7 @@
 
 
 We are announcing the launch of the **IKEA Furniture Assembly environment** as a first-of-its-kind benchmark for testing and accelerating the automation of physical assembly processes.
-An agent (Sawyer, Baxter, Cursor) is required to move, align, and connect furniture parts sequentially.
+An agent (Sawyer, Baxter, Jaco, Panda, Fetch) is required to move, align, and connect furniture parts sequentially.
 The task is completed when all parts are connected.
 
 
@@ -40,12 +40,19 @@ The structure of the repository:
 
 ### Prerequisites
 - Ubuntu 18.04, MacOS Catalina, Windows10
-- Python 3.7 (pybullet may not work with Python 3.8 or higher)
-- Mujoco 2.0
+- Python 3.9
+- Mujoco 2.1.1
 - Unity 2018.4.23f1 ([Install using Unity Hub](https://unity3d.com/get-unity/download))
 
 ### Installation
 ```bash
+# from github (latest)
+pip install git+git//github.com/clvrai/furniture.git
+
+# from pypi
+pip install furniture
+
+# from code
 git clone https://github.com/clvrai/furniture.git
 cd furniture
 pip install -e .
@@ -54,12 +61,19 @@ pip install -e .
 See [`docs/installation.md`](docs/installation.md) for more detailed instruction and troubleshooting.<br/>
 If you are on a headless server, make sure you run a [virtual display](docs/installation.md#virtual-display-on-headless-machines) and use `--virtual_display` to specify the display number (e.g. :0 or :1).
 
+For VR control, install `oculus_reader` package following the [instruction](https://github.com/rail-berkeley/oculus_reader). If you already have ADB and git-lfs installed, you can simply install `oculus_reader` with `pip install git+https://github.com/rail-berkeley/oculus_reader.git`.
+
 
 ## (1) Human control
 You can use WASDQE keys for moving and IJKLUO keys for rotating an end-effector of an agent. SPACE and ENTER are closing and opening the gripper, respectively. C key will connect two aligned parts.
 
 ```bash
-python -m furniture.demo_manual
+python -m furniture.manual
+```
+
+Oculus Quest2 is also available to control robots.
+```bash
+python -m furniture.vr
 ```
 
 ## (2) Gym interface
@@ -69,7 +83,7 @@ import gym
 import furniture
 
 # make an environment
-env = gym.make('IKEASawyer-v0', furniture_name="table_lack_0825")
+env = gym.make("IKEASawyer-v0", furniture_name="table_lack_0825")
 
 done = False
 
@@ -149,4 +163,4 @@ Our Mujoco environment is developed based on Robosuite and Unity implementation 
 ```
 
 ## Contributors
-We thank Alex Yin and Zhengyu Yang for their contributions. We would like to thank everyone who has helped IKEA Furniture Assembly Environment in any way.
+We thank [Alex Yin](https://www.linkedin.com/in/alexyin1/) and [Zhengyu Yang](https://zhengyuyang.com) for their contributions. We would like to thank everyone who has helped IKEA Furniture Assembly Environment in any way.

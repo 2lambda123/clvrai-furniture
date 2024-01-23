@@ -52,39 +52,36 @@ class FurnitureEnv(metaclass=EnvMeta):
     Base class for IKEA furniture assembly environment.
     """
 
-    name = "furniture"
-
-    def __init__(self, config):
+    def __init__(self, cfg):
         """
         Initializes class with the configuration.
         """
-        self._config = config
+        self._cfg = cfg
 
         # default env config
-        self._max_episode_steps = config.max_episode_steps
+        self._max_episode_steps = cfg.max_episode_steps
 
-        self._debug = config.debug
+        self._debug = cfg.debug
         if logger.getEffectiveLevel() != logging.CRITICAL:
             logger.setLevel(logging.INFO)
         if self._debug:
             logger.setLevel(logging.DEBUG)
 
-        self._rng = np.random.RandomState(config.seed)
+        self._rng = np.random.RandomState(cfg.seed)
 
-        if config.render and not config.unity:
+        if cfg.render and not cfg.unity.use_unity:
             self._render_mode = "human"
         else:
             self._render_mode = "no"  # ['no', 'human', 'rgb_array']
 
-        self._screen_width = config.screen_width
-        self._screen_height = config.screen_height
+        self._screen_width = cfg.screen_size[0]
+        self._screen_height = cfg.screen_size[1]
 
-        self._agent_type = config.agent_type
-        self._control_type = config.control_type
-        self._control_freq = config.control_freq  # reduce freq -> longer timestep
-        self._discrete_grip = config.discrete_grip
-        self._rescale_actions = config.rescale_actions
-        self._auto_align = config.auto_align
+        self._agent_type = cfg.agent_type
+        self._control_type = cfg.control_type
+        self._control_freq = cfg.control_freq  # reduce freq -> longer timestep
+        self._rescale_actions = cfg.rescale_actions
+        self._auto_align = cfg.auto_align
 
         if self._agent_type == "Baxter":
             self._arms = ["right", "left"]
@@ -93,21 +90,21 @@ class FurnitureEnv(metaclass=EnvMeta):
 
         if self._control_type in NEW_CONTROLLERS:
             self._load_controller(
-                config.control_type,
+                cfg.control_type,
                 os.path.join(
                     os.path.dirname(__file__), "controllers/controller_config.hjson"
                 ),
                 {},
             )
 
-        self._robot_ob = config.robot_ob
-        self._object_ob = config.object_ob
-        self._object_ob_all = config.object_ob_all
-        self._visual_ob = config.visual_ob
-        self._subtask_ob = config.subtask_ob
-        self._segmentation_ob = config.segmentation_ob
-        self._depth_ob = config.depth_ob
-        self._camera_ids = config.camera_ids
+        self._robot_ob = cfg.robot_ob
+        self._object_ob = cfg.object_ob
+        self._object_ob_all = cfg.object_ob_all
+        self._visual_ob = cfg.visual_ob
+        self._subtask_ob = cfg.subtask_ob
+        self._segmentation_ob = cfg.segmentation_ob
+        self._depth_ob = cfg.depth_ob
+        self._camera_ids = cfg.camera_ids
         self._camera_name = "frontview"
         self._is_render = False
         self._furniture_id = None
@@ -119,49 +116,49 @@ class FurnitureEnv(metaclass=EnvMeta):
         self._manual_resize = None
         self._action_on = False
         self._init_qpos = None
-        if config.load_demo:
-            with open(config.load_demo, "rb") as f:
+        if cfg.load_demo:
+            with open(cfg.load_demo, "rb") as f:
                 demo = pickle.load(f)
                 self._init_qpos = demo["states"][0]
 
         self._load_init_states = None
-        if config.load_init_states:
-            with open(config.load_init_states, "rb") as f:
+        if cfg.load_init_states:
+            with open(cfg.load_init_states, "rb") as f:
                 self._load_init_states = pickle.load(f)
 
-        if config.furniture_name:
-            furniture_name = config.furniture_name
-            config.furniture_id = furniture_name2id[config.furniture_name]
+        if cfg.furniture_name:
+            furniture_name = cfg.furniture_name
+            cfg.furniture_id = furniture_name2id[cfg.furniture_name]
         else:
-            furniture_name = furniture_names[config.furniture_id]
+            furniture_name = furniture_names[cfg.furniture_id]
         self.file_prefix = self._agent_type + "_" + furniture_name + "_"
 
-        self._record_demo = config.record_demo
+        self._record_demo = cfg.record_demo
         if self._record_demo:
-            self._demo = DemoRecorder(config.demo_dir)
+            self._demo = DemoRecorder(cfg.demo_dir)
 
-        self._record_vid = config.record_vid
-        self.vid_rec = None
-        if self._record_vid:
+        self._record_vid = cfg.record_vid
+        self._video = None
+        if cfg.record_vid:
             if self._record_demo:
-                self.vid_rec = VideoRecorder(
-                    record_mode=config.record_mode,
+                self._video = VideoRecorder(
+                    record_mode=cfg.record_mode,
                     prefix=self.file_prefix,
-                    demo_dir=config.demo_dir,
+                    demo_dir=cfg.demo_dir,
                 )
             else:
-                self.vid_rec = VideoRecorder(
-                    record_mode=config.record_mode, prefix=self.file_prefix
+                self._video = VideoRecorder(
+                    record_mode=cfg.record_mode, prefix=self.file_prefix
                 )
 
         self._num_connect_steps = 0
         self._gravity_compensation = 0
 
-        self._move_speed = config.move_speed
-        self._rotate_speed = config.rotate_speed
+        self._move_speed = cfg.move_speed
+        self._rotate_speed = cfg.rotate_speed
 
-        self._preassembled = config.preassembled
-        self._num_connects = config.num_connects
+        self._preassembled = cfg.preassembled
+        self._num_connects = cfg.num_connects
 
         if self._agent_type != "Cursor" and self._control_type in [
             "ik",
@@ -174,35 +171,35 @@ class FurnitureEnv(metaclass=EnvMeta):
         self._viewer = None
         self._unity = None
         self._unity_updated = False
-        if config.unity:
+        if cfg.unity.use_unity:
             self._unity = UnityInterface(
-                config.port, config.unity_editor, config.virtual_display
+                cfg.unity.port, cfg.unity.use_editor, cfg.unity.virtual_display
             )
             # set to the best quality
-            self._unity.set_quality(config.quality)
+            self._unity.set_quality(cfg.unity.quality)
 
-        if config.render and platform == "win32":
+        if cfg.render and platform == "win32":
             from mujoco_py import GlfwContext
 
             GlfwContext(offscreen=True)  # create a window to init GLFW
 
         if self._object_ob_all:
-            if config.furniture_name is not None:
-                self._furniture_id = furniture_name2id[config.furniture_name]
+            if cfg.furniture_name is not None:
+                self._furniture_id = furniture_name2id[cfg.furniture_name]
             else:
-                self._furniture_id = config.furniture_id
+                self._furniture_id = cfg.furniture_id
             self._load_model_object()
             self._furniture_id = None
 
-    def update_config(self, config):
-        """ Updates private member variables with @config dictionary. """
+    def update_config(self, cfg):
+        """Updates private member variables with @cfg dictionary."""
         # Not all config can be appropriately updated.
-        for k, v in config.items():
+        for k, v in cfg.items():
             if hasattr(self, "_" + k):
                 setattr(self, "_" + k, v)
 
     def set_subtask(self, subtask, num_connects=None):
-        """ Simply sets @self._preassembled to [0, 1, ..., @subtask]. """
+        """Simply sets @self._preassembled to [0, 1, ..., @subtask]."""
         self._preassembled = range(subtask)
         self._num_connects = num_connects
 
@@ -338,11 +335,11 @@ class FurnitureEnv(metaclass=EnvMeta):
         Returns initial random distribution.
         """
         if name == "furniture":
-            r = self._config.furn_xyz_rand
+            r = self._cfg.furn_xyz_rand
         elif name == "agent":
-            r = self._config.agent_xyz_rand
+            r = self._cfg.agent_xyz_rand
         elif name == "resize":
-            r = self._config.furn_size_rand
+            r = self._cfg.furn_size_rand
         else:
             r = 0
 
@@ -395,7 +392,10 @@ class FurnitureEnv(metaclass=EnvMeta):
         """
         Updates unity rendering with qpos. Call this after you change qpos
         """
-        self._unity.set_qpos(self.sim.data.qpos)
+        self._unity.update_pos(
+            np.hstack((self.sim.data.body_xpos, self.sim.data.body_xquat)),
+        )
+
         if self._agent_type == "Cursor":
             for cursor_i in range(2):
                 cursor_name = "cursor%d" % cursor_i
@@ -464,7 +464,7 @@ class FurnitureEnv(metaclass=EnvMeta):
             self._terminal = True
             if self._fail:
                 self._fail = False
-                penalty = -self._config.unstable_penalty_coef
+                penalty = -self._cfg.reward.unstable_penalty
 
         if self._terminal:
             total_time = time.time() - self._episode_time
@@ -516,13 +516,13 @@ class FurnitureEnv(metaclass=EnvMeta):
                     if touch_left_finger[body_id] and touch_right_finger[body_id]:
                         if not self._touched[body_id]:
                             self._touched[body_id] = True
-                            touch_reward += self._config.touch_reward
+                            touch_reward += self._cfg.reward.touch
                         if not touch_floor[body_id] and not self._picked[body_id]:
                             self._picked[body_id] = True
-                            pick_reward += self._config.pick_reward
+                            pick_reward += self._cfg.reward.pick
 
         # Success reward
-        success_reward = self._config.success_reward * (
+        success_reward = self._cfg.reward.success * (
             self._num_connected - self._prev_num_connected
         )
         self._prev_num_connected = self._num_connected
@@ -546,7 +546,7 @@ class FurnitureEnv(metaclass=EnvMeta):
         """
         if a is None or self._agent_type == "Cursor":
             return 0
-        ctrl_penalty = -self._config.ctrl_penalty_coef * np.square(a).sum()
+        ctrl_penalty = -self._cfg.reward.ctrl_penalty * np.square(a).sum()
         return ctrl_penalty
 
     def _set_camera_position(self, cam_id, cam_pos):
@@ -691,14 +691,7 @@ class FurnitureEnv(metaclass=EnvMeta):
             self._unity.disconnect_to_unity()
         self._destroy_viewer()
 
-    def __delete__(self):
-        """
-        Called to destroy environment
-        """
-        if self._unity:
-            self._unity.disconnect_to_unity()
-
-    def __del__(self):
+    def __delete__(self, instance):
         """
         Called to destroy environment
         """
@@ -710,10 +703,10 @@ class FurnitureEnv(metaclass=EnvMeta):
         Moves cursor by move_offset amount, takes into account the
         boundary
         """
-        cursor_name = "cursor%d" % cursor_i
+        cursor_name = f"cursor{cursor_i}"
         cursor_pos = self._get_pos(cursor_name)
         cursor_pos = cursor_pos + move_offset
-        boundary = self._config.cursor_boundary
+        boundary = self._cfg.cursor_boundary
         if (np.abs(cursor_pos) < boundary).all() and cursor_pos[
             2
         ] >= self._move_speed * 0.45:
@@ -775,7 +768,7 @@ class FurnitureEnv(metaclass=EnvMeta):
         self.sim.forward()
         self.sim.step()
         min_pos, max_pos = self._get_bounding_box(obj_name)
-        b = self._config.cursor_boundary
+        b = self._cfg.cursor_boundary
         if (min_pos < np.array([-b, -b, -0.05])).any() or (
             max_pos > np.array([b, b, b])
         ).any():
@@ -917,7 +910,7 @@ class FurnitureEnv(metaclass=EnvMeta):
         self._get_next_subtask()
 
         # reset robot arm
-        if self._config.reset_robot_after_attach:
+        if self._cfg.reset_robot_after_attach:
             self._initialize_robot_pos()
             if self._control_type in ["ik", "ik_quaternion"]:
                 # set up ik controller
@@ -1059,6 +1052,8 @@ class FurnitureEnv(metaclass=EnvMeta):
         Checks if two sites are connected or not, given the site names, and
         returns possible rotations
         """
+        cfg = self._cfg
+
         site1_xpos = self._site_xpos_xquat(connector1)
         site2_xpos = self._site_xpos_xquat(connector2)
 
@@ -1078,10 +1073,7 @@ class FurnitureEnv(metaclass=EnvMeta):
         project2_1 = np.dot(up2, T.unit_vector(site1_xpos[:3] - site2_xpos[:3]))
 
         logger.debug(
-            f"pos_dist: {pos_dist}  "
-            + f"rot_dist_up: {rot_dist_up}  "
-            + f"rot_dist_forward: {rot_dist_forward}  "
-            + f"project: {project1_2}, {project2_1}  "
+            f"pos_dist: {pos_dist}  rot_dist_up: {rot_dist_up}  rot_dist_forward: {rot_dist_forward}  project: {project1_2}, {project2_1}"
         )
 
         max_rot_dist_forward = rot_dist_forward
@@ -1106,7 +1098,7 @@ class FurnitureEnv(metaclass=EnvMeta):
                 forward1_rotated = T.rotate_vector(forward1, up1, angle)
                 rot_dist_forward = T.cos_siml(forward1_rotated, forward2)
                 max_rot_dist_forward = max(max_rot_dist_forward, rot_dist_forward)
-                if rot_dist_forward > self._config.alignment_rot_dist_forward:
+                if rot_dist_forward > cfg.alignment_rot_dist_forward:
                     is_rot_forward_aligned = True
                     self._target_connector_xquat = T.convert_quat(
                         T.lookat_to_quat(up1, forward1_rotated), "wxyz"
@@ -1114,39 +1106,33 @@ class FurnitureEnv(metaclass=EnvMeta):
                     break
 
         if (
-            pos_dist < self._config.alignment_pos_dist
-            and rot_dist_up > self._config.alignment_rot_dist_up
+            pos_dist < cfg.alignment_pos_dist
+            and rot_dist_up > cfg.alignment_rot_dist_up
             and is_rot_forward_aligned
-            and abs(project1_2) > self._config.alignment_project_dist
-            and abs(project2_1) > self._config.alignment_project_dist
+            and abs(project1_2) > cfg.alignment_project_dist
+            and abs(project2_1) > cfg.alignment_project_dist
         ):
             return True
 
         # connect two parts if they are very close to each other
         if (
-            pos_dist < self._config.alignment_pos_dist / 2
-            and rot_dist_up > self._config.alignment_rot_dist_up
+            pos_dist < cfg.alignment_pos_dist / 2
+            and rot_dist_up > cfg.alignment_rot_dist_up
             and is_rot_forward_aligned
         ):
             return True
 
-        if pos_dist >= self._config.alignment_pos_dist:
+        if pos_dist >= cfg.alignment_pos_dist:
             logger.debug(
-                "(connect) two parts are too far ({} >= {})".format(
-                    pos_dist, self._config.alignment_pos_dist
-                )
+                f"(connect) two parts are too far ({pos_dist} >= {cfg.alignment_pos_dist})"
             )
-        elif rot_dist_up <= self._config.alignment_rot_dist_up:
+        elif rot_dist_up <= cfg.alignment_rot_dist_up:
             logger.debug(
-                "(connect) misaligned ({} <= {})".format(
-                    rot_dist_up, self._config.alignment_rot_dist_up
-                )
+                f"(connect) misaligned ({rot_dist_up} <= {cfg.alignment_rot_dist_up})"
             )
         elif not is_rot_forward_aligned:
             logger.debug(
-                "(connect) aligned, but rotate a connector ({} <= {})".format(
-                    max_rot_dist_forward, self._config.alignment_rot_dist_forward
-                )
+                f"(connect) aligned, but rotate a connector ({max_rot_dist_forward} <= {cfg.alignment_rot_dist_forward})"
             )
         else:
             logger.debug("(connect) misaligned. move connectors to align the axis")
@@ -1394,9 +1380,9 @@ class FurnitureEnv(metaclass=EnvMeta):
             xpos((float * 3) * n_obj): x,y,z position of the objects in world frame
             xquat((float * 4) * n_obj): quaternion of the objects
         """
-        if self._config.fix_init_parts and len(self.fixed_parts) == 0 and self.init_pos:
+        if self._cfg.fix_init_parts and len(self.fixed_parts) == 0 and self.init_pos:
             mjcf_obj = next(iter(self.mujoco_objects.values()))
-            for part in self._config.fix_init_parts:
+            for part in self._cfg.fix_init_parts:
                 pos = self.init_pos[part]
                 quat = Quaternion(self.init_quat[part])
                 rad = mjcf_obj.get_horizontal_radius(part)
@@ -1409,7 +1395,7 @@ class FurnitureEnv(metaclass=EnvMeta):
         Randomly resets furniture by disabling robot collision, spreading
         parts around, and then reenabling collision.
         """
-        if self._config.furniture_name == "Random":
+        if self._cfg.furniture_name == "Random":
             furniture_id = self._rng.randint(len(furniture_xmls))
         if (
             self._furniture_id is None
@@ -1417,15 +1403,15 @@ class FurnitureEnv(metaclass=EnvMeta):
             or (self._manual_resize is not None)
         ):
             # construct mujoco xml for furniture_id
-            self._furniture_id = furniture_id or self._config.furniture_id
+            self._furniture_id = furniture_id or self._cfg.furniture_id
             self._reset_internal()
             self.file_prefix = (
                 self._agent_type + "_" + furniture_names[self._furniture_id] + "_"
             )
-            if self.vid_rec:
-                self.vid_rec.set_outfile(self.file_prefix)
+            if self._video:
+                self._video.set_outfile(self.file_prefix)
 
-        if self._config.furn_size_rand != 0:
+        if self._cfg.furn_size_rand != 0:
             rand = self._init_random(1, "resize")[0]
             resize_factor = 1 + rand
             self.mujoco_model.resize_objects(resize_factor)
@@ -1500,7 +1486,7 @@ class FurnitureEnv(metaclass=EnvMeta):
                 self._merge_groups(object_name1, object_name2)
         elif eq_obj1id is not None:
             for i, (id1, id2) in enumerate(zip(eq_obj1id, eq_obj2id)):
-                self.sim.model.eq_active[i] = 1 if self._config.assembled else 0
+                self.sim.model.eq_active[i] = 1 if self._cfg.assembled else 0
 
         if self._init_qpos:
             self.set_env_state(self._init_qpos)
@@ -1519,14 +1505,14 @@ class FurnitureEnv(metaclass=EnvMeta):
         else:
             if self.init_pos is None:
                 self.init_pos, self.init_quat = self._place_objects()
-            elif not self._config.fix_init:
+            elif not self._cfg.fix_init:
                 init_pos, init_quat = self._place_objects()
                 self.init_pos.update(init_pos)
                 self.init_quat.update(init_quat)
             # set furniture positions
             for i, body in enumerate(self._object_names):
                 logger.debug(f"{body} {self.init_pos[body]} {self.init_quat[body]}")
-                if self._config.assembled:
+                if self._cfg.assembled:
                     self._object_group[i] = 0
                 else:
                     self._set_qpos(body, self.init_pos[body], self.init_quat[body])
@@ -1655,8 +1641,8 @@ class FurnitureEnv(metaclass=EnvMeta):
         # set object positions in unity
         if self._unity:
             if background is None and self._background is None:
-                background = self._config.background
-            if self._config.background == "Random":
+                background = self._cfg.unity.background
+            if self._cfg.unity.background == "Random":
                 background = self._rng.choice(background_names)
             if background and background != self._background:
                 self._background = background
@@ -1675,7 +1661,7 @@ class FurnitureEnv(metaclass=EnvMeta):
             with open(controller_file) as f:
                 params = hjson.load(f)
         except FileNotFoundError:
-            logger.warn(
+            logger.warning(
                 "Controller config file '{}' not found. Please check filepath and try again.".format(
                     controller_file
                 )
@@ -1954,12 +1940,12 @@ class FurnitureEnv(metaclass=EnvMeta):
             self.mujoco_robot.set_xpos([0, 0, self._move_speed / 2])
 
         # hide an agent
-        if not self._config.render_agent:
+        if not self._cfg.render_agent:
             for x in self.mujoco_robot.worldbody.findall(".//geom"):
                 x.set("rgba", "0 0 0 0")
 
         # no collision with an agent
-        if self._config.no_collision:
+        if self._cfg.no_collision:
             for x in self.mujoco_robot.worldbody.findall(".//geom"):
                 x.set("conaffinity", "0")
                 x.set("contype", "0")
@@ -1986,7 +1972,7 @@ class FurnitureEnv(metaclass=EnvMeta):
         resize_factor = None
         if self._manual_resize is not None:
             resize_factor = 1 + self._manual_resize
-        elif self._config.furn_size_rand != 0:
+        elif self._cfg.furn_size_rand != 0:
             rand = self._init_random(1, "resize")[0]
             resize_factor = 1 + rand
         self._objects = MujocoXMLObject(path, debug=self._debug, resize=resize_factor)
@@ -2024,8 +2010,8 @@ class FurnitureEnv(metaclass=EnvMeta):
             self.mujoco_robot,
             self.mujoco_objects,
             self.mujoco_equality,
-            self._config.furn_xyz_rand,
-            self._config.furn_rot_rand,
+            self._cfg.furn_xyz_rand,
+            self._cfg.furn_rot_rand,
             self._rng,
             init_qpos,
         )
@@ -2095,7 +2081,7 @@ class FurnitureEnv(metaclass=EnvMeta):
             return
 
         logger.info("Input action: %s" % action)
-        self.action = action
+        self._action_keyboard = action
         self._action_on = True
 
     def key_input_unity(self):
@@ -2150,7 +2136,7 @@ class FurnitureEnv(metaclass=EnvMeta):
             return
 
         logger.info("Input action: %s" % action)
-        self.action = action
+        self._action_keyboard = action
         self._action_on = True
 
     def resize_key_input_unity(self):
@@ -2177,26 +2163,26 @@ class FurnitureEnv(metaclass=EnvMeta):
             return
 
         logger.info("Input action: %s" % action)
-        self.action = action
+        self._action_keyboard = action
         self._action_on = True
 
-    def run_demo(self, config=None):
+    def run_demo(self, cfg=None):
         """
         Since we save all states, just play back states
         """
-        if config is None:
-            config = self._config
-        if config.furniture_name is not None:
-            config.furniture_id = furniture_name2id[config.furniture_name]
-        self.reset(config.furniture_id, config.background)
-        if self._record_vid:
-            self.vid_rec.capture_frame(self.render("rgb_array")[0])
+        if cfg is None:
+            cfg = self._cfg
+        if cfg.furniture_name is not None:
+            cfg.furniture_id = furniture_name2id[cfg.furniture_name]
+        self.reset(cfg.furniture_id, cfg.unity.background)
+        if cfg.record_vid:
+            self._video.capture_frame(self.render("rgb_array")[0])
         else:
             self.render("rgb_array")[0]
-        with open(config.load_demo, "rb") as f:
+        with open(cfg.load_demo, "rb") as f:
             demo = pickle.load(f)
             all_states = demo["state"]
-            if config.debug:
+            if cfg.debug:
                 for i, (obs, action) in enumerate(zip(demo["obs"], demo["actions"])):
                     logger.debug("action", i, action)
         try:
@@ -2205,19 +2191,19 @@ class FurnitureEnv(metaclass=EnvMeta):
                 self.sim.forward()
                 if self._unity:
                     self._update_unity()
-                if self._record_vid:
-                    self.vid_rec.capture_frame(self.render("rgb_array")[0])
+                if cfg.record_vid:
+                    self._video.capture_frame(self.render("rgb_array")[0])
                 else:
                     self.render("rgb_array")[0]
 
         finally:
-            if self._record_vid:
-                self.vid_rec.close()
+            if cfg.record_vid:
+                self._video.close()
 
     def get_vr_input(self, controller):
         c = self.vr.devices[controller]
         if controller not in self.vr.devices:
-            logger.warn("Lost track of ", controller)
+            logger.warning("Lost track of ", controller)
             return None, None
         # pose = c.get_pose_euler()
         pose = c.get_pose_quaternion()
@@ -2228,11 +2214,11 @@ class FurnitureEnv(metaclass=EnvMeta):
             pose[3:] = T.euler_to_quat([0, 0, 180], pose[3:])
         state = c.get_controller_inputs()
         if pose is None or state is None or np.linalg.norm(pose[:3]) < 0.001:
-            logger.warn("Lost track of pose ", controller)
+            logger.warning("Lost track of pose ", controller)
             return None, None
         return np.asarray(pose), state
 
-    def run_vr(self, config=None):
+    def run_vr_htc(self, cfg=None):
         """
         Runs the environment with HTC Vive support
         """
@@ -2241,17 +2227,17 @@ class FurnitureEnv(metaclass=EnvMeta):
         self.vr = triad_openvr.triad_openvr()
         self.vr.print_discovered_objects()
 
-        if config is None:
-            config = self._config
-        assert config.render, "Set --render True to see the viewer"
+        if cfg is None:
+            cfg = self._cfg
+        assert cfg.render, "Set --render True to see the viewer"
 
-        if config.furniture_name is not None:
-            config.furniture_id = furniture_name2id[config.furniture_name]
-        self.reset(config.furniture_id, config.background)
+        if cfg.furniture_name is not None:
+            cfg.furniture_id = furniture_name2id[cfg.furniture_name]
+        self.reset(cfg.furniture_id, cfg.unity.background)
 
-        if self._record_vid:
-            self.vid_rec.capture_frame(self.render("rgb_array")[0])
-        if config.render:
+        if cfg.record_vid:
+            self._video.capture_frame(self.render("rgb_array")[0])
+        if cfg.render:
             self.render()
 
         # set initial pose of controller as origin
@@ -2263,7 +2249,7 @@ class FurnitureEnv(metaclass=EnvMeta):
 
         def init_origin():
             for i, arm in enumerate(self._arms):
-                logger.warn("Initialize %s VR controller", arm)
+                logger.warning("Initialize %s VR controller", arm)
                 while True:
                     origin_pose, origin_state = self.get_vr_input(
                         "controller_%d" % (i + 1)
@@ -2345,7 +2331,7 @@ class FurnitureEnv(metaclass=EnvMeta):
                         break
                 action_pos[arm], action_rot[arm] = get_action(pose[arm], arm)
 
-            if config.render:
+            if cfg.render:
                 self.render()
 
             reset = False
@@ -2371,7 +2357,7 @@ class FurnitureEnv(metaclass=EnvMeta):
                 connect = -1
                 if self._record_demo:
                     self._demo.save(self.file_prefix)
-                self.reset(config.furniture_id, config.background)
+                self.reset(cfg.furniture_id, cfg.unity.background)
                 init_origin()
                 continue
 
@@ -2392,41 +2378,274 @@ class FurnitureEnv(metaclass=EnvMeta):
             logger.info(str(t) + " Take action: " + str(action))
             ob, reward, done, info = self.step(action)
 
-            if self._record_vid:
-                self.vid_rec.capture_frame(self.render("rgb_array")[0])
+            if cfg.record_vid:
+                self._video.capture_frame(self.render("rgb_array")[0])
             t += 1
             if done:
                 if self._record_demo:
                     self._demo.save(self.file_prefix)
-                self.reset(config.furniture_id, config.background)
-                if self._record_vid:
-                    self.vid_rec.capture_frame(self.render("rgb_array")[0])
+                self.reset(cfg.furniture_id, cfg.unity.background)
+                if cfg.record_vid:
+                    self._video.capture_frame(self.render("rgb_array")[0])
                 t = 0
                 connect = -1
                 init_origin()
 
             time.sleep(0.05)
 
-    def run_manual(self, config=None):
+    def run_vr_oculus(self, cfg=None):
+        """
+        Runs the environment with Oculus Quest2
+        """
+        try:
+            from oculus_reader.reader import OculusReader
+        except ImportError:
+            raise Exception(
+                "Please install oculus_reader following https://github.com/rail-berkeley/oculus_reader"
+            )
+
+        vr = OculusReader()
+
+        if cfg is None:
+            cfg = self._cfg
+        assert cfg.render, "Set --render True to see the viewer"
+
+        if cfg.furniture_name is not None:
+            cfg.furniture_id = furniture_name2id[cfg.furniture_name]
+        self.reset(cfg.furniture_id, cfg.unity.background)
+
+        if cfg.record_vid:
+            self._video.capture_frame(self.render("rgb_array")[0])
+        if cfg.render:
+            self.render()
+
+        # set initial pose of controller as origin
+        prev_handle_press = {arm: False for arm in self._arms}
+        prev_gripper_press = {arm: False for arm in self._arms}
+        prev_vr_pos = {arm: None for arm in self._arms}
+        prev_vr_quat = {arm: None for arm in self._arms}
+        prev_sim_pos = {arm: None for arm in self._arms}
+        prev_sim_quat = {arm: None for arm in self._arms}
+        flag = {arm: False for arm in self._arms}
+        default_action_pos = {arm: np.array([0, 0, 0]) for arm in self._arms}
+        if self._control_type == "ik":
+            default_action_rot = {arm: np.array([0, 0, 0]) for arm in self._arms}
+        elif self._control_type == "ik_quaternion":
+            default_action_rot = {arm: np.array([1, 0, 0, 0]) for arm in self._arms}
+
+        def get_pose_and_button():
+            poses, buttons = vr.get_transformations_and_buttons()
+
+            handle_press = {"right": False, "left": False}
+            vr_poses = {"right": None, "left": None}
+            gripper_press = {"right": False, "left": False}
+
+            handle_press["right"] = buttons.get("RTr", False)
+            handle_press["left"] = buttons.get("LTr", False)
+            gripper_press["right"] = buttons.get("RG", False)
+            gripper_press["left"] = buttons.get("LG", False)
+            connect_press = buttons.get("A", False) or buttons.get("X", False)
+            reset_press = buttons.get("B", False) or buttons.get("Y", False)
+
+            if handle_press["right"]:
+                vr_poses["right"] = poses.get("r", None)
+            if handle_press["left"]:
+                vr_poses["left"] = poses.get("l", None)
+
+            return vr_poses, handle_press, gripper_press, connect_press, reset_press
+
+        def rel_pos(a, b):
+            return a - b
+
+        def rel_quat(a, b):
+            return np.array(list(Quaternion(a).inverse * Quaternion(b)))
+
+        def quat_to_rot(quat):
+            rot = np.array(
+                T.quaternion_to_euler(*T.convert_quat(np.array(quat), to="xyzw"))
+            )
+            # swap rotation axes
+            rot[0], rot[1], rot[2] = 0, rot[0], 0
+            # rot[0], rot[1], rot[2] = 0, 0, rot[1]
+            # rot[0], rot[1], rot[2] = rot[2], 0, 0
+            # rot[0], rot[1], rot[2] = rot[2], rot[0], rot[1]
+            # logger.info(rot)
+
+            if abs(rot[0]) < 1:
+                rot[0] = 0
+            if abs(rot[1]) < 1:
+                rot[1] = 0
+            if abs(rot[2]) < 1:
+                rot[2] = 0
+            return rot
+
+        def get_action(vr_pos, vr_quat, arm):
+            rel_vr_pos = rel_pos(prev_vr_pos[arm], vr_pos)
+            # relative movement speed between VR and simulation
+            rel_vr_pos *= 2.5
+            # swap y, z axes
+            rel_vr_pos[0] = -rel_vr_pos[0]
+            rel_vr_pos[1], rel_vr_pos[2] = rel_vr_pos[2], rel_vr_pos[1]
+            rel_vr_quat = rel_quat(prev_vr_quat[arm], vr_quat)  # wxyz
+
+            sim_pos = self.sim.data.get_body_xpos(f"{arm}_hand").copy()
+            sim_quat = self.sim.data.get_body_xquat(f"{arm}_hand").copy()  # wxyz
+            sim_quat = T.convert_quat(T.mat2quat(self._right_hand_orn), to="wxyz")
+
+            rel_sim_pos = rel_pos(prev_sim_pos[arm], sim_pos)
+            rel_sim_quat = rel_quat(prev_sim_quat[arm], sim_quat)  # wxyz
+
+            action_pos = rel_pos(rel_sim_pos, rel_vr_pos)
+            action_quat = rel_quat(rel_sim_quat, rel_vr_quat)  # wxyz
+            action_quat = rel_quat(sim_quat, vr_quat)
+            action_rot = quat_to_rot(action_quat) / 100
+
+            if self._control_type == "ik":
+                return action_pos, action_rot
+            elif self._control_type == "ik_quaternion":
+                return action_pos, action_quat
+
+        flip_axis = np.array([[1, 0, 0], [0, 0, -1], [0, -1, 0]])
+        tmp_vr_quat = None
+        t = 0
+        select = {"left": -1, "right": -1}
+        while True:
+            (
+                vr_poses,
+                handle_press,
+                gripper_press,
+                connect_press,
+                reset_press,
+            ) = get_pose_and_button()
+
+            reset = False
+            connect = -1
+            action_pos = default_action_pos.copy()
+            action_rot = default_action_rot.copy()
+
+            for arm in self._arms:
+                if handle_press[arm]:
+                    if prev_handle_press[arm]:
+                        # compute action
+                        vr_pos = vr_poses[arm][:3, 3]
+                        tmp_vr_quat = T.convert_quat(
+                            T.mat2quat(vr_poses[arm][:3, :3]), to="wxyz"
+                        )
+                        # tmp_vr_quat = T.euler_to_quat([270, 0, 180],
+                        # tmp_vr_quat)  # matches world-frame orientation
+                        tmp_vr_quat = T.euler_to_quat([90, 0, 90], tmp_vr_quat)
+                        tmp_vr_mat = Quaternion(tmp_vr_quat).rotation_matrix
+                        tmp_vr_mat = flip_axis.T @ tmp_vr_mat @ flip_axis
+                        tmp_vr_mat = self.pose_in_base_from_pose(vr_pos, tmp_vr_mat)[
+                            :3, :3
+                        ]
+                        tmp_vr_quat = T.convert_quat(T.mat2quat(tmp_vr_mat), to="wxyz")
+                        action_pos[arm], action_rot[arm] = get_action(
+                            vr_pos, tmp_vr_quat, arm
+                        )
+                    else:
+                        # reset reference vr pose
+                        prev_vr_pos[arm] = vr_poses[arm][:3, 3]
+                        tmp_vr_quat = T.convert_quat(
+                            T.mat2quat(vr_poses[arm][:3, :3]), to="wxyz"
+                        )
+                        tmp_vr_quat = T.euler_to_quat([90, 0, 90], tmp_vr_quat)
+                        tmp_vr_mat = Quaternion(tmp_vr_quat).rotation_matrix
+                        tmp_vr_mat = flip_axis.T @ tmp_vr_mat @ flip_axis
+                        tmp_vr_mat = self.pose_in_base_from_pose(
+                            prev_vr_pos[arm], tmp_vr_mat
+                        )[:3, :3]
+                        tmp_vr_quat = T.convert_quat(T.mat2quat(tmp_vr_mat), to="wxyz")
+                        prev_vr_quat[arm] = tmp_vr_quat
+
+                        # reset reference robot pose
+                        prev_sim_pos[arm] = self.sim.data.get_body_xpos(
+                            f"{arm}_hand"
+                        ).copy()
+                        prev_sim_quat[arm] = self.sim.data.get_body_xquat(
+                            f"{arm}_hand"
+                        ).copy()
+
+                if prev_gripper_press[arm] and not gripper_press[arm]:
+                    select[arm] *= -1
+
+                prev_handle_press[arm] = handle_press[arm]
+                prev_gripper_press[arm] = gripper_press[arm]
+
+            if tmp_vr_quat is not None:
+                self._set_quat("VR_R", tmp_vr_quat)
+
+            if reset_press:
+                reset = True
+            if connect_press:
+                connect = 1
+
+            if cfg.render:
+                self.render()
+
+            if reset:
+                t = 0
+                select = {"left": -1, "right": -1}
+                prev_handle_press = {"right": False, "left": False}
+                if self._record_demo:
+                    self._demo.save(self.file_prefix)
+                self.reset(cfg.furniture_id, cfg.unity.background)
+                if cfg.record_vid:
+                    self._video.capture_frame(self.render("rgb_array")[0])
+                continue
+
+            action_items = []
+            for arm in self._arms:
+                action_items.append(action_pos[arm])
+                if self._control_type == "ik":
+                    action_items.append(action_rot[arm] / self._rotate_speed)
+                else:
+                    action_items.append(action_rot[arm])
+            for arm in self._arms:
+                action_items.append([select[arm]])
+            action_items.append([connect])
+
+            action = np.hstack(action_items)
+            action = np.clip(action, -1.0, 1.0)
+
+            # logger.info(str(t) + " Take action: " + str(action))
+            ob, reward, done, info = self.step(action)
+
+            if cfg.record_vid:
+                self._video.capture_frame(self.render("rgb_array")[0])
+            t += 1
+            if done:
+                if self._record_demo:
+                    self._demo.save(self.file_prefix)
+                self.reset(cfg.furniture_id, cfg.unity.background)
+                if cfg.record_vid:
+                    self._video.capture_frame(self.render("rgb_array")[0])
+                t = 0
+                select = {"left": -1, "right": -1}
+                prev_handle_press = {"right": False, "left": False}
+
+            time.sleep(0.02)
+
+    def run_manual(self, cfg=None):
         """
         Run the environment under manual (keyboard) control
         """
-        if config is None:
-            config = self._config
-        if config.furniture_name is not None:
-            config.furniture_id = furniture_name2id[config.furniture_name]
-        self.reset(config.furniture_id, config.background)
+        if cfg is None:
+            cfg = self._cfg
+        if cfg.furniture_name is not None:
+            cfg.furniture_id = furniture_name2id[cfg.furniture_name]
+        self.reset(cfg.furniture_id, cfg.unity.background)
 
-        if self._record_vid:
-            self.vid_rec.capture_frame(self.render("rgb_array")[0])
+        if cfg.record_vid:
+            self._video.capture_frame(self.render("rgb_array")[0])
         else:
             self.render()
 
-        if not config.unity:
+        if not self._unity:
             # override keyboard callback function of viewer
             import glfw
 
-            assert self._config.render, "Set --render True for manual control"
+            assert cfg.render, "Set --render True for manual control"
             glfw.set_key_callback(self._get_viewer().window, self.key_callback)
 
         cursor_idx = 0
@@ -2434,7 +2653,7 @@ class FurnitureEnv(metaclass=EnvMeta):
         t = 0
         try:
             while True:
-                if config.unity:
+                if self._unity:
                     self.key_input_unity()
 
                 if not self._action_on:
@@ -2443,59 +2662,59 @@ class FurnitureEnv(metaclass=EnvMeta):
                     continue
 
                 action = np.zeros((8,))
-                if self.action == "reset":
+                if self._action_keyboard == "reset":
                     self.reset()
-                    if self._config.record_vid:
-                        self.vid_rec.capture_frame(self.render("rgb_array")[0])
+                    if cfg.record_vid:
+                        self._video.capture_frame(self.render("rgb_array")[0])
                     else:
                         self.render()
                     self._action_on = False
                     continue
 
-                if self.action == "switch1":
+                if self._action_keyboard == "switch1":
                     cursor_idx = 0
                     self._action_on = False
                     continue
-                if self.action == "switch2":
+                if self._action_keyboard == "switch2":
                     cursor_idx = 1
                     self._action_on = False
                     continue
 
                 # pick
-                if self.action == "sel":
+                if self._action_keyboard == "sel":
                     flag[cursor_idx] = 1
-                if self.action == "des":
+                if self._action_keyboard == "des":
                     flag[cursor_idx] = -1
 
                 # connect
-                if self.action == "connect":
+                if self._action_keyboard == "connect":
                     action[7] = 1
 
                 # move
-                if self.action == "m_f":
+                if self._action_keyboard == "m_f":
                     action[1] = 1
-                if self.action == "m_b":
+                if self._action_keyboard == "m_b":
                     action[1] = -1
-                if self.action == "m_u":
+                if self._action_keyboard == "m_u":
                     action[2] = 1
-                if self.action == "m_d":
+                if self._action_keyboard == "m_d":
                     action[2] = -1
-                if self.action == "m_l":
+                if self._action_keyboard == "m_l":
                     action[0] = -1
-                if self.action == "m_r":
+                if self._action_keyboard == "m_r":
                     action[0] = 1
                 # rotate
-                if self.action == "r_f":
+                if self._action_keyboard == "r_f":
                     action[4] = 1
-                if self.action == "r_b":
+                if self._action_keyboard == "r_b":
                     action[4] = -1
-                if self.action == "r_u":
+                if self._action_keyboard == "r_u":
                     action[5] = 1
-                if self.action == "r_d":
+                if self._action_keyboard == "r_d":
                     action[5] = -1
-                if self.action == "r_l":
+                if self._action_keyboard == "r_l":
                     action[3] = -1
-                if self.action == "r_r":
+                if self._action_keyboard == "r_r":
                     action[3] = 1
 
                 if self._agent_type == "Cursor":
@@ -2534,11 +2753,11 @@ class FurnitureEnv(metaclass=EnvMeta):
                 logger.info(f"Action: {action}")
                 ob, reward, done, info = self.step(action)
 
-                if self._record_vid:
-                    self.vid_rec.capture_frame(self.render("rgb_array")[0])
+                if cfg.record_vid:
+                    self._video.capture_frame(self.render("rgb_array")[0])
                 else:
                     self.render()
-                if self.action == "screenshot":
+                if self._action_keyboard == "screenshot":
                     import imageio
 
                     img, depth = self.render("rgbd_array")
@@ -2548,7 +2767,7 @@ class FurnitureEnv(metaclass=EnvMeta):
                         if depth is not None:
                             depth = np.concatenate(depth)
 
-                    imageio.imwrite(config.furniture_name + ".png", img)
+                    imageio.imwrite(cfg.furniture_name + ".png", img)
                     if self._segmentation_ob:
                         seg = self.render("segmentation")
                         if len(seg.shape) == 4:
@@ -2559,7 +2778,7 @@ class FurnitureEnv(metaclass=EnvMeta):
                     if self._depth_ob:
                         imageio.imwrite("depth_ob.png", depth)
 
-                if self.action == "save" and self._record_demo:
+                if self._action_keyboard == "save" and self._record_demo:
                     self._demo.save(self.file_prefix)
 
                 self._action_on = False
@@ -2569,31 +2788,31 @@ class FurnitureEnv(metaclass=EnvMeta):
                     flag = [-1, -1]
                     if self._record_demo:
                         self._demo.save(self.file_prefix)
-                    self.reset(config.furniture_id, config.background)
-                    if self._record_vid:
-                        self.vid_rec.capture_frame(self.render("rgb_array")[0])
+                    self.reset(cfg.furniture_id, cfg.unity.background)
+                    if cfg.record_vid:
+                        self._video.capture_frame(self.render("rgb_array")[0])
                     else:
                         self.render()
         finally:
-            if self._record_vid:
-                self.vid_rec.close()
+            if cfg.record_vid:
+                self._video.close()
 
-    def run_demo_actions(self, config=None):
+    def run_demo_actions(self, cfg=None):
         """
         Play the stored actions in demonstration
         """
-        if config is None:
-            config = self._config
-        if config.furniture_name is not None:
-            config.furniture_id = furniture_name2id[config.furniture_name]
-        self.reset(config.furniture_id, config.background)
-        if self._record_vid:
-            self.vid_rec.capture_frame(self.render("rgb_array")[0])
-        elif self._config.render:
+        if cfg is None:
+            cfg = self._cfg
+        if cfg.furniture_name is not None:
+            cfg.furniture_id = furniture_name2id[cfg.furniture_name]
+        self.reset(cfg.furniture_id, cfg.unity.background)
+        if cfg.record_vid:
+            self._video.capture_frame(self.render("rgb_array")[0])
+        elif cfg.render:
             self.render()
 
         # Load demo
-        with open(config.load_demo, "rb") as f:
+        with open(cfg.load_demo, "rb") as f:
             demo = pickle.load(f)
             actions = demo["actions"]
             low_level_actions = demo["low_level_actions"]
@@ -2604,60 +2823,60 @@ class FurnitureEnv(metaclass=EnvMeta):
                 for action in low_level_actions:
                     logger.info("Action: %s", str(action))
                     ob, _, _, _ = self.step(action)
-                    if self._record_vid:
-                        self.vid_rec.capture_frame(self.render("rgb_array")[0])
-                    elif self._config.render:
+                    if cfg.record_vid:
+                        self._video.capture_frame(self.render("rgb_array")[0])
+                    elif cfg.render:
                         self.render()
                         time.sleep(0.03)
             else:
                 for action in actions:
                     # logger.info("Action: %s", str(action))
                     ob, _, _, _ = self.step(action)
-                    if self._record_vid:
-                        self.vid_rec.capture_frame(self.render("rgb_array")[0])
-                    elif self._config.render:
+                    if cfg.record_vid:
+                        self._video.capture_frame(self.render("rgb_array")[0])
+                    elif cfg.render:
                         self.render()
                         time.sleep(0.03)
 
         finally:
-            if self._record_vid:
-                self.vid_rec.close()
+            if cfg.record_vid:
+                self._video.close()
 
-    def run_resizer(self, config=None):
+    def run_resizer(self, cfg=None):
         """
         Run a resizing program in unity for adjusting furniture size in xml
         """
         self._manual_resize = 0
-        if config.furniture_name is not None:
-            config.furniture_id = furniture_name2id[config.furniture_name]
-        ob = self.reset(config.furniture_id, config.background)
+        if cfg.furniture_name is not None:
+            cfg.furniture_id = furniture_name2id[cfg.furniture_name]
+        ob = self.reset(cfg.furniture_id, cfg.unity.background)
         self.render()
         cursor_idx = 0
         flag = [-1, -1]
         t = 0
         while True:
-            if config.unity:
+            if self._unity:
                 self.resize_key_input_unity()
 
             if not self._action_on:
                 time.sleep(0.1)
                 continue
 
-            if self.action == "reset":
+            if self._action_keyboard == "reset":
                 self.reset()
                 self.render()
                 self._action_on = False
                 continue
             # move
-            if self.action == "smaller":
+            if self._action_keyboard == "smaller":
                 self._manual_resize -= 0.1
-            if self.action == "fine_smaller":
+            if self._action_keyboard == "fine_smaller":
                 self._manual_resize -= 0.02
-            if self.action == "fine_larger":
+            if self._action_keyboard == "fine_larger":
                 self._manual_resize += 0.02
-            if self.action == "larger":
+            if self._action_keyboard == "larger":
                 self._manual_resize += 0.1
-            if self.action == "save":
+            if self._action_keyboard == "save":
                 path = xml_path_completion(furniture_xmls[self._furniture_id])
                 next(iter(self.mujoco_objects.values())).save_model(path)
                 return
@@ -2666,10 +2885,10 @@ class FurnitureEnv(metaclass=EnvMeta):
             ob, reward, done, info = self.step(action)
             self.render("rgb_array")
             logger.info("current_scale: " + str(1 + self._manual_resize))
-            self.reset(config.furniture_id, config.background)
+            self.reset(cfg.furniture_id, cfg.unity.background)
             self._action_on = False
 
-    def run_img(self, config=None):
+    def run_img(self, cfg=None):
         """
         Run a resizing program in unity for adjusting furniture size in xml
         """
@@ -2887,11 +3106,11 @@ class FurnitureEnv(metaclass=EnvMeta):
                         self._stop_object(obj_name, gravity=1)
 
         except Exception as e:
-            logger.warn(
+            logger.warning(
                 "[!] Warning: Simulation is unstable. The episode is terminated."
             )
-            logger.warn(e)
-            logger.warn(type(e))
+            logger.warning(e)
+            logger.warning(type(e))
             self.set_init_qpos(None)
             self.reset()
             self._fail = True
@@ -2975,7 +3194,7 @@ class FurnitureEnv(metaclass=EnvMeta):
                 )
 
             # keep trying to reach the target in a closed-loop
-            ctrl = self._setup_action(low_action)
+            ctrl = self._setup_action(np.clip(low_action, -1, 1))
             for i in range(self._action_repeat):
                 self._do_simulation(ctrl)
                 if self._record_demo:
@@ -3042,7 +3261,7 @@ class FurnitureEnv(metaclass=EnvMeta):
                 )
 
             # keep trying to reach the target in a closed-loop
-            ctrl = self._setup_action(low_action)
+            ctrl = self._setup_action(np.clip(low_action, -1, 1))
             for i in range(self._action_repeat):
                 self._do_simulation(ctrl)
                 if self._record_demo:
@@ -3084,11 +3303,11 @@ class FurnitureEnv(metaclass=EnvMeta):
             self._cur_time += self._control_timestep
 
         except Exception as e:
-            logger.warn(
+            logger.warning(
                 "[!] Warning: Simulation is unstable. The episode is terminated."
             )
-            logger.warn(e)
-            logger.warn(type(e))
+            logger.warning(e)
+            logger.warning(type(e))
             self.reset()
             self._fail = True
 
@@ -3387,6 +3606,20 @@ class FurnitureEnv(metaclass=EnvMeta):
         pos_in_world = self.sim.data.get_body_xpos(name)
         rot_in_world = self.sim.data.get_body_xmat(name).reshape((3, 3))
         pose_in_world = T.make_pose(pos_in_world, rot_in_world)
+
+        base_pos_in_world = self.sim.data.get_body_xpos("base")
+        base_rot_in_world = self.sim.data.get_body_xmat("base").reshape((3, 3))
+        base_pose_in_world = T.make_pose(base_pos_in_world, base_rot_in_world)
+        world_pose_in_base = T.pose_inv(base_pose_in_world)
+
+        pose_in_base = T.pose_in_A_to_pose_in_B(pose_in_world, world_pose_in_base)
+        return pose_in_base
+
+    def pose_in_base_from_pose(self, pos, xmat):
+        """
+        A helper function that returns the pose in the base frame.
+        """
+        pose_in_world = T.make_pose(pos, xmat)
 
         base_pos_in_world = self.sim.data.get_body_xpos("base")
         base_rot_in_world = self.sim.data.get_body_xmat("base").reshape((3, 3))

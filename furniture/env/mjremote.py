@@ -176,7 +176,7 @@ class mjremote:
         self.height = height
         self.width = width
 
-    def getinput(self):
+    def getkeyinput(self):
         if not self._s:
             return "Not connected"
         self._s.sendall(struct.pack("i", 15))
@@ -194,6 +194,14 @@ class mjremote:
         self._s.sendall(fpos.tobytes())
         self._s.sendall(struct.pack("i", len(name)))
         self._s.send(name.encode())
+
+    def updatepos(self, body_pos_quat):
+        if not self._s:
+            return "Not connected"
+        self._s.sendall(struct.pack("i", 22))
+        for i in range(len(body_pos_quat)):
+            fpos_body_quat = body_pos_quat[i].astype("float32")
+            self._s.sendall(fpos_body_quat.tobytes())
 
     def setbackground(self, name):
         if not self._s:
